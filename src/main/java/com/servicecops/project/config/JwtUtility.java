@@ -1,13 +1,10 @@
 package com.servicecops.project.config;
 
-import com.jmsoft.Moonlight.Core.MoonlightException;
 import com.servicecops.project.models.database.SystemRoleModel;
 import com.servicecops.project.models.database.SystemUserModel;
-import com.servicecops.project.repositories.SystemRoleRepository;
 import com.servicecops.project.repositories.SystemUserRepository;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import lombok.Data;
@@ -17,7 +14,6 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
-import java.security.Key;
 import java.sql.Timestamp;
 import java.util.*;
 import java.util.function.Function;
@@ -27,7 +23,7 @@ import java.util.function.Function;
 public class JwtUtility {
 
     private final SystemUserRepository userRepository;
-    private final SystemRoleRepository roleRepository;
+    //private final SystemRoleRepository roleRepository;
 
     @Value("${secret}")
     private String secret;
@@ -60,16 +56,16 @@ public class JwtUtility {
      * makes all the previously generated token expired.
      */
     private boolean isTokenExpired(String token, String username) throws Exception {
-        SystemUserModel usersModel = userRepository.findFirstByUsername(username);
-        if (usersModel == null) {
+        Optional<SystemUserModel> usersModel = userRepository.findByUsername(username);
+        if (usersModel.isEmpty()) {
             throw new IllegalStateException("User not found");
         } else if (extractExpiration(token).before(new Date())) {
             throw new Exception("SESSION EXPIRED");
-        } else if (usersModel.getLastLoggedInAt() == null) {
+        } else if (usersModel.get().getLastLoggedInAt() == null) {
             throw new IllegalStateException("INVALID TOKEN");
-        } else if (extractIssuedAt(token).after(usersModel.getLastLoggedInAt())) {
+        } else if (extractIssuedAt(token).after(usersModel.get().getLastLoggedInAt())) {
             throw new Exception("EXPIRED TOKEN USED");
-        } else if (!usersModel.getIsActive()) {
+        } else if (!usersModel.get().getIsActive()) {
             throw new Exception("ACCOUNT INACTIVE");
         }
         return false;
@@ -80,26 +76,34 @@ public class JwtUtility {
     }
 
     public String generateToken(Map<String, Object> claims, UserDetails userDetails) {
-        // truck the last time the token was generated -- the last time the user logged in
+
         long now = System.currentTimeMillis();
         Timestamp stamp = new Timestamp(now);
 
-        SystemUserModel user = userRepository.findFirstByUsername(userDetails.getUsername());
-
-        // archived staff members should not login
+        Optional<SystemUserModel> userOptional =
+                userRepository.findByUsername(userDetails.getUsername());
+        if (userOptional.isEmpty()) {
+            throw new IllegalStateException("User not found");
+        }
+        SystemUserModel user = userOptional.get();
         user.setLastLoggedInAt(stamp);
         userRepository.save(user);
-        Optional<SystemRoleModel> rolesModel = roleRepository.findFirstByRoleCode(user.getRoleCode());
 
-        rolesModel.ifPresentOrElse(
-                model -> {
-                    claims.put("role", model.getRoleName());
-                    claims.put("role_code", model.getRoleCode());
-                    claims.put("domain", model.getRoleDomain());
-                },
-                () -> new IllegalArgumentException("Invalid User Role")
-        );
-        
+        // getting roles to add to token
+        SystemRoleModel role = user.getRole();
+        if (role == null ) {
+            throw new IllegalArgumentException("Invalid User Role");
+        }
+
+        List<String> roleCodes = new ArrayList<>();
+
+            if (role.getRoleCode() != null) {
+                roleCodes.add(role.getRoleCode());
+            }
+
+        claims.put("roles", roleCodes);
+
+        // adding permissions to token
         List<String> permissions = new ArrayList<>();
         for (GrantedAuthority authority : userDetails.getAuthorities()) {
             if (!permissions.contains(authority.getAuthority())) {
@@ -107,6 +111,7 @@ public class JwtUtility {
             }
         }
         claims.put("permissions", permissions);
+
         return Jwts
                 .builder()
                 .claims(claims)
@@ -116,7 +121,6 @@ public class JwtUtility {
                 .signWith(getSigningKey(), Jwts.SIG.HS256)
                 .compact();
     }
-
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = extractAllClaims(token);
         return claimsResolver.apply(claims);
