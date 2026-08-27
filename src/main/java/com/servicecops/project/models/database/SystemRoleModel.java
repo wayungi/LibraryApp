@@ -1,36 +1,39 @@
 package com.servicecops.project.models.database;
 
-import com.servicecops.project.models.jpahelpers.enums.AppDomains;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.CurrentTimestamp;
 
 import java.sql.Timestamp;
+import java.util.Set;
 
-@Entity
 @Data
-@AllArgsConstructor
-@NoArgsConstructor
 @Builder
-@Table(name = "system_role", schema = "public", catalog = "project_db")
+@NoArgsConstructor
+@AllArgsConstructor
+@Entity
+@Table(name = "system_roles")
 public class SystemRoleModel {
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Id
-    @Column(name = "id")
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    @Basic
-    @Column(name = "role_name")
-    private String roleName;
-    @Basic
-    @Column(name = "role_code")
     private String roleCode;
-    @Basic
+    private String description;
+
     @Column(name = "created_at")
     @CreationTimestamp
     private Timestamp createdAt;
-    @Basic
-    @Column(name = "domain")
-    @Enumerated(EnumType.STRING)
-    private AppDomains roleDomain;
+
+    @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "system_roles_system_permissions",
+            joinColumns = @JoinColumn(name = "role_id"),
+            inverseJoinColumns = @JoinColumn(name = "permissions_id")
+    )
+    private Set<SystemPermissionModel> permissions;
 }

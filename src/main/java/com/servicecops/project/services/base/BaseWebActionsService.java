@@ -4,7 +4,6 @@ import com.alibaba.fastjson2.JSONObject;
 import com.servicecops.project.config.ApplicationConf;
 import com.servicecops.project.models.database.SystemRoleModel;
 import com.servicecops.project.models.database.SystemUserModel;
-import com.servicecops.project.models.jpahelpers.enums.AppDomains;
 import com.servicecops.project.repositories.SystemRoleRepository;
 import com.servicecops.project.repositories.SystemUserRepository;
 import com.servicecops.project.utils.OperationReturnObject;
@@ -103,7 +102,7 @@ public abstract class BaseWebActionsService implements BaseWebActionsImpl {
         if (Boolean.TRUE.equals(isAuthenticated())){
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             UserDetails userDetails = (UserDetails) authentication.getPrincipal();
-            return userRepository.findFirstByUsername(userDetails.getUsername());
+            return userRepository.findByUsername(userDetails.getUsername()).get();
         }
         throw new IllegalArgumentException("AUTHENTICATION REQUIRED");
     }
@@ -116,7 +115,7 @@ public abstract class BaseWebActionsService implements BaseWebActionsImpl {
     public Boolean hasRole(String roleCode){
         SystemUserModel usersModel = authenticatedUser();
         if (usersModel != null){
-            Optional<SystemRoleModel> rolesModel = roleRepository.findFirstByRoleCode(usersModel.getRoleCode());
+            Optional<SystemRoleModel> rolesModel = roleRepository.findFirstByRoleCode(usersModel.getRole().getRoleCode());
             if (rolesModel.isPresent()){
                 SystemRoleModel role= rolesModel.get();
                 return Objects.equals(role.getRoleCode(), roleCode);
@@ -207,34 +206,13 @@ public abstract class BaseWebActionsService implements BaseWebActionsImpl {
      * @return SystemRoleModel - The role object
      */
     public SystemRoleModel getRole(){
-        String roleCode = authenticatedUser().getRoleCode();
+        String roleCode = authenticatedUser().getRole().getRoleCode();
         // query for the role code
         Optional<SystemRoleModel> rolesModel = roleRepository.findFirstByRoleCode(roleCode);
         if (rolesModel.isEmpty()){
             throw new IllegalStateException("UNKNOWN USER ROLE");
         }
         return rolesModel.get();
-    }
-
-    /**
-     * Checks if the user has access to a certain domain
-     * @param domain AppDomains - The domain in quest
-     */
-    public void belongsTo(AppDomains domain){
-        if (getUserDomain() != domain){
-            throw new IllegalStateException("You have no access to the "+domain+" services");
-        }
-    }
-
-    /**
-     * The domain of the currently logged-in user
-     * Remember, users don't belong to a domain directly but via the role assigned to them.
-     * @return AppDomain -- The domain String of the user according to the role assigned to them.
-     *
-     * @implNote This may be null if the entire app is not supporting domains
-     */
-    public AppDomains getUserDomain(){
-        return getRole().getRoleDomain();
     }
 
 }
