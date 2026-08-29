@@ -1,133 +1,126 @@
-CREATE TABLE IF NOT EXISTS public.system_domain (
-    id bigint NOT NULL,
-    domain_name character varying
+--changeset project:create-yearly-number-sequence-table
+
+CREATE TABLE yearly_number_sequence (
+                                        registration_year INTEGER NOT NULL,
+                                        sequence_type VARCHAR(50) NOT NULL,
+                                        last_number BIGINT NOT NULL DEFAULT 0,
+
+                                        CONSTRAINT pk_yearly_number_sequence
+                                            PRIMARY KEY (registration_year, sequence_type)
 );
 
-CREATE SEQUENCE IF NOT EXISTS public.system_domain_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
+--changeset project:create-next-yearly-sequence-function splitStatements:false
 
-ALTER SEQUENCE IF EXISTS public.system_domain_id_seq OWNED BY public.system_domain.id;
+CREATE OR REPLACE FUNCTION get_next_yearly_sequence(
+    p_year INTEGER,
+    p_sequence_type VARCHAR
+)
+RETURNS BIGINT
+LANGUAGE plpgsql
+AS $$
+DECLARE
+next_number BIGINT;
+BEGIN
 
-CREATE TABLE IF NOT EXISTS public.system_permission (
-    id bigint NOT NULL,
-    permission_code character varying NOT NULL,
-    permission_name character varying,
-    domain character varying
-);
+INSERT INTO yearly_number_sequence (
+    registration_year,
+    sequence_type,
+    last_number
+)
+VALUES (
+           p_year,
+           p_sequence_type,
+           1
+       )
+    ON CONFLICT (registration_year, sequence_type)
+    DO UPDATE
+               SET last_number =
+               yearly_number_sequence.last_number + 1
+               RETURNING last_number INTO next_number;
 
-CREATE SEQUENCE IF NOT EXISTS public.system_permission_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
+RETURN next_number;
 
-ALTER SEQUENCE IF EXISTS public.system_permission_id_seq OWNED BY public.system_permission.id;
+END;
+$$;
 
+--changeset project:create-admission-number-function splitStatements:false
 
-CREATE TABLE IF NOT EXISTS public.system_role (
-    id bigint NOT NULL,
-    role_name character varying NOT NULL,
-    role_code character varying NOT NULL,
-    created_at timestamp without time zone DEFAULT now(),
-    domain character varying
-);
+CREATE OR REPLACE FUNCTION generate_admission_number()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+current_year INTEGER;
+    sequence_number BIGINT;
+BEGIN
 
-CREATE SEQUENCE IF NOT EXISTS public.system_role_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
+    IF NEW.admission_number IS NULL OR NEW.admission_number = '' THEN
 
-ALTER SEQUENCE IF EXISTS public.system_role_id_seq OWNED BY public.system_role.id;
+        current_year := EXTRACT(YEAR FROM CURRENT_DATE);
 
-CREATE TABLE IF NOT EXISTS public.system_role_permission_assignment (
-    id bigint NOT NULL,
-    permission_code character varying NOT NULL,
-    role_code character varying NOT NULL
-);
+        sequence_number := get_next_yearly_sequence(
+            current_year,
+            'STUDENT'
+        );
 
-CREATE SEQUENCE IF NOT EXISTS public.system_role_permission_assignment_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
+        NEW.admission_number :=
+            current_year::TEXT ||
+            LPAD(
+                sequence_number::TEXT,
+                5,
+                '0'
+            );
 
-ALTER SEQUENCE IF EXISTS public.system_role_permission_assignment_id_seq OWNED BY public.system_role_permission_assignment.id;
+END IF;
 
+RETURN NEW;
+END;
+$$;
 
-CREATE TABLE IF NOT EXISTS public.system_user (
-    id bigint NOT NULL,
-    first_name character varying,
-    last_name character varying,
-    password character varying NOT NULL,
-    email character varying NOT NULL,
-    username character varying,
-    role_code character varying,
-    created_at timestamp without time zone DEFAULT now(),
-    last_logged_in_at timestamp without time zone,
-    is_active boolean DEFAULT false
-);
+--changeset project:create-admission-number-trigger
 
+CREATE TRIGGER trg_generate_admission_number
+    BEFORE INSERT ON students
+    FOR EACH ROW
+    EXECUTE FUNCTION generate_admission_number();
 
-CREATE SEQUENCE IF NOT EXISTS public.system_user_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
+--changeset project:create-employee-number-function splitStatements:false
 
+CREATE OR REPLACE FUNCTION generate_employee_number()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+current_year INTEGER;
+    sequence_number BIGINT;
+BEGIN
 
-ALTER SEQUENCE IF EXISTS public.system_user_id_seq OWNED BY public.system_user.id;
+    IF NEW.employee_number IS NULL OR NEW.employee_number = '' THEN
 
-ALTER TABLE ONLY public.system_domain ALTER COLUMN id SET DEFAULT nextval('public.system_domain_id_seq'::regclass);
+        current_year := EXTRACT(YEAR FROM CURRENT_DATE);
 
-ALTER TABLE ONLY public.system_permission ALTER COLUMN id SET DEFAULT nextval('public.system_permission_id_seq'::regclass);
+        sequence_number := get_next_yearly_sequence(
+            current_year,
+            'EMPLOYEE'
+        );
 
-ALTER TABLE ONLY public.system_role ALTER COLUMN id SET DEFAULT nextval('public.system_role_id_seq'::regclass);
+        NEW.employee_number :=
+            'EMP' ||
+            current_year::TEXT ||
+            LPAD(
+                sequence_number::TEXT,
+                5,
+                '0'
+            );
 
-ALTER TABLE ONLY public.system_role_permission_assignment ALTER COLUMN id SET DEFAULT nextval('public.system_role_permission_assignment_id_seq'::regclass);
+END IF;
 
-ALTER TABLE ONLY public.system_user ALTER COLUMN id SET DEFAULT nextval('public.system_user_id_seq'::regclass);
+RETURN NEW;
+END;
+$$;
+--changeset project:create-employee-number-trigger
 
-ALTER TABLE ONLY public.system_domain
-    ADD CONSTRAINT system_domain_domain_name_key UNIQUE (domain_name);
-
-ALTER TABLE ONLY public.system_domain
-    ADD CONSTRAINT system_domain_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.system_permission
-    ADD CONSTRAINT system_permission_permission_code_key UNIQUE (permission_code);
-
-ALTER TABLE ONLY public.system_permission
-    ADD CONSTRAINT system_permission_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.system_role_permission_assignment
-    ADD CONSTRAINT system_role_permission_assignment_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.system_role
-    ADD CONSTRAINT system_role_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.system_role
-    ADD CONSTRAINT system_role_role_code_key UNIQUE (role_code);
-
-ALTER TABLE ONLY public.system_user
-    ADD CONSTRAINT system_user_email_key UNIQUE (email);
-
-ALTER TABLE ONLY public.system_user
-    ADD CONSTRAINT system_user_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.system_user
-    ADD CONSTRAINT system_user_username_key UNIQUE (username);
-
-ALTER TABLE ONLY public.system_role_permission_assignment
-    ADD CONSTRAINT system_role_permission_assignment_system_permission_code_fk FOREIGN KEY (permission_code) REFERENCES public.system_permission(permission_code) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.system_role_permission_assignment
-    ADD CONSTRAINT system_role_permission_assignment_system_role_role_code_fk FOREIGN KEY (role_code) REFERENCES public.system_role(role_code) ON DELETE CASCADE;
+CREATE TRIGGER trg_generate_employee_number
+    BEFORE INSERT ON librarians
+    FOR EACH ROW
+    EXECUTE FUNCTION generate_employee_number();

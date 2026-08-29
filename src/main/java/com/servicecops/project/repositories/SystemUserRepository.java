@@ -1,6 +1,6 @@
 package com.servicecops.project.repositories;
 
-import com.servicecops.project.models.database.*;
+import com.servicecops.project.models.database.SystemUserModel;
 import com.servicecops.project.models.jpahelpers.repository.JetRepository;
 import org.springframework.stereotype.Repository;
 

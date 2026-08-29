@@ -64,7 +64,7 @@ public class Student extends BaseEntity{
 
     @Column(name = "country", nullable = false)
     private String country;
-
+// ignore, it's system created.
     @OneToOne(fetch = FetchType.EAGER, cascade = CascadeType.ALL)
     @JoinColumn(
             name = "user_id"

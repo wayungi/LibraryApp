@@ -1,11 +1,9 @@
 package com.servicecops.project.models.entities;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
 import lombok.*;
-import org.hibernate.annotations.Check;
-
-import java.util.HashSet;
-import java.util.Set;
 
 @Entity
 @Table(name = "books")
